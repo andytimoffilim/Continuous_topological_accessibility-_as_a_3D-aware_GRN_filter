@@ -1,0 +1,351 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[russian,english]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{caption}
+\geometry{margin=2.5cm}
+
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{theorem}{Theorem}
+\newtheorem{remark}{Remark}
+
+\title{Continuous Topological Accessibility (RFA) as a 3D-Aware GRN Filter: \\
+Anticorrelation with eQTL and No Prediction of $\Delta$RNA}
+\author{Timofeev Andrey \\
+\small AI Center for SCO+ Countries, Saint Petersburg, Russia}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We formalize \emph{Relative Forest Accessibility} (RFA), a topological accessibility index computed as the solution of $(I - \gamma P)x = v_0$, where $P$ is a Markov transition matrix built from Hi-C contacts and $v_0$ is a vector of TF peaks (or ATAC peaks). RFA yields a continuous accessibility profile across all genomic bins.
+
+We test RFA on three targets. First, on promoter TF counts (GM12878 chr1, 10\,kb, 811 genes), RFA loses to 1D distance (AUC 0.836 vs 0.976); this is an artifact because the target and the 1D distance look at the same window. Second, on eQTL (GTEx v10 LCL, chr1+17+19, 10\,kb, 1625 genes), RFA \emph{anticorrelates} with eQTL: $\rho(\mathrm{RFA}, -\log_{10} p_{\min}) = -0.09$, $\mathrm{AUC}(\mathrm{RFA}) = 0.386$ (below chance), $\mathrm{AUC}(-\mathrm{RFA}) = 0.614$. High RFA corresponds to fewer eQTL, and dose-response analysis confirms that $\mathrm{AUC}(\mathrm{RFA})$ decreases with eQTL strength (mean trend $-0.056$, 19/20 TFs). Third, on $\Delta$RNA (MCF10A vs MCF7, 40\,kb, ATAC peaks), RFA does not predict $\Delta$RNA ($\rho = +0.005$, permutation $p=0.87$, MDR$=0.067$ at $n=1730$); within-line sanity checks are also zero.
+
+We conclude that RFA anticorrelates with eQTL and does not predict $\Delta$RNA. The anticorrelation may reflect expression buffering: genes with strong eQTL are less accessible in 3D. RFA is not a universal predictor but a filter with an inverted sign on eQTL and no signal on $\Delta$RNA.
+\end{abstract}
+
+\section{Introduction}
+
+\subsection{Problem}
+Existing 3D-aware TF$\rightarrow$gene filters (SSD 2017, Esearch3D 2023, ChIPSP 2026) use either a binary (loop yes/no) or a scalar (direct contact, 1D distance). RFA offers a continuous accessibility profile. The key question is: \emph{where does RFA give signal, and in which direction}.
+
+\subsection{Positioning}
+We position RFA not as a ``new framework'' but as ``continuous topological accessibility as a resolution-dependent 3D-aware GRN filter''. RFA is not a universal predictor but a filter with a clearly delineated applicability domain and a \emph{signal direction}.
+
+\subsection{Contributions}
+\begin{enumerate}
+    \item Formalization of RFA via a Markov random walk (Section~\ref{sec:theory}).
+    \item \textbf{Anticorrelation of RFA with eQTL} ($\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$).
+    \item \textbf{Negative result on $\Delta$RNA} ($\rho=0.005$, MDR$=0.067$).
+    \item \textbf{Methodological warning:} an automatic sign flip in AUC can mask anticorrelation as ``high AUC''; dose-response reveals it.
+\end{enumerate}
+
+\section{Theory}\label{sec:theory}
+
+We formalize the computation of a \emph{topological accessibility index} (RFA) that quantifies how accessible a genomic locus is to a transcription factor (TF) given the 3D chromatin architecture measured by Hi-C. The construction proceeds in four stages: from Hi-C contact counts to a weighted graph; from the graph to a Markov transition matrix; from the transition matrix to a continuous accessibility profile; from the profile to per-gene scores and validation statistics. Throughout, the Markov chain is a \emph{mathematical instrument for deconvolving spatial noise and accounting for multi-step paths}, not a kinetic model of TF motion.
+
+\subsection{Hi-C Graph Construction}
+
+Let $C \in \mathbb{R}_{\geq 0}^{n \times n}$ be a symmetric Hi-C contact matrix at resolution $r$ (e.g., $r = 10\,\mathrm{kb}$), where $n$ is the number of genomic bins  measured by Hi-C \cite{dekker2013,rao2014}. We apply:
+\begin{enumerate}
+    \item \textbf{Diagonal zeroing}: $C_{ii} := 0$ for all $i$, eliminating self-contacts that would otherwise dominate the degree distribution.
+    \item \textbf{Top-$k$ sparsification}: For each row $i$, retain only the $k$ largest entries, yielding a sparse matrix $\tilde{A}$. This replaces dense noise with the strongest topological signals. Statistical treatment of Hi-C noise and sparsification is discussed
+in \cite{hu2013}.
+    \item \textbf{Symmetrization}: $A := \max(\tilde{A}, \tilde{A}^\top)$, preserving symmetry.
+\end{enumerate}
+
+A/B compartments (the dominant large-scale chromatin structure) are captured by the first principal component of $\log(1+C)$. To isolate fine-scale topological structure from compartment signal, we regress each row of $A$ on the compartment score and retain residuals:
+\begin{equation}
+A_{ij}^{\mathrm{res}} = A_{ij} - \big(\beta_0^{(i)} + \beta_1^{(i)} \mathrm{PC1}_j\big), \qquad A_{ij}^{\mathrm{res}} := \max(A_{ij}^{\mathrm{res}}, 0),
+\end{equation}
+where $(\beta_0^{(i)}, \beta_1^{(i)})$ are obtained by ordinary least squares on the support of row $i$.
+
+\subsection{Markov Transition Matrix}
+
+Define the degree vector $d_i = \sum_j A_{ij}$ and the diagonal matrix $D = \mathrm{diag}(d_1, \dots, d_n)$. The row-stochastic transition matrix is
+\begin{equation}
+P = D^{-1} A, \qquad P_{ij} = \frac{A_{ij}}{d_i}, \qquad \sum_j P_{ij} = 1.
+\end{equation}
+The matrix $P$ encodes the probability that a random walker at bin $i$ moves to bin $j$ in one step.
+
+\begin{remark}
+The Markov chain is \emph{not} a kinetic model of TF motion. It is a graph-theoretic object whose powers $P^t$ aggregate the contributions of all paths of length $t$ through the chromatin graph.
+\end{remark}
+
+\begin{proposition}
+The matrix $P$ has the following properties:
+\begin{enumerate}
+    \item $P$ is row-stochastic: $P \mathbf{1} = \mathbf{1}$.
+    \item The stationary distribution $\pi$ satisfies $\pi P = \pi$, with $\pi_i = d_i / \sum_j d_j$ (degree-weighted).
+    \item $P$ is similar to a symmetric matrix: $D^{1/2} P D^{-1/2} = D^{-1/2} A D^{-1/2}$, which is symmetric. Hence all eigenvalues of $P$ are real and lie in $[-1, 1]$.
+\end{enumerate}
+\end{proposition}
+
+\subsection{Relative Forest Accessibility (RFA)}
+
+Given a source distribution $v_0 \in \mathbb{R}_{\geq 0}^n$ (e.g., TF binding peaks in bins), we define the RFA profile as
+\begin{equation}
+x_\gamma := (I - \gamma P)^{-1} v_0 = \sum_{t=0}^{\infty} \gamma^t P^t v_0,
+\label{eq:rfa}
+\end{equation}
+where $\gamma \in (0,1)$ is a damping factor.
+
+\begin{proposition}[Convergence]
+The Neumann series \eqref{eq:rfa} converges for all $\gamma \in (0,1)$.
+\end{proposition}
+\begin{proof}
+Since $\|P\|_\infty = 1$ and $\rho(P) \leq 1$, we have $\|(\gamma P)^t\|_\infty \leq \gamma^t$, and $\sum_{t=0}^\infty \gamma^t = 1/(1-\gamma) < \infty$.
+\end{proof}
+
+The profile $x_\gamma$ has three equivalent interpretations:
+\begin{enumerate}
+    \item \textbf{Path sum}: $x_{\gamma,i} = \sum_{t=0}^\infty \gamma^t (P^t v_0)_i$ is a weighted sum over all paths of length $t$ from peaks to bin $i$, with exponential decay in path length.
+    \item \textbf{Steady-state with restart}: $x_\gamma$ is the unique solution of $(I - \gamma P) x = v_0$, equivalent to a random walk with restart (RWR) at rate $1-\gamma$.
+    \item \textbf{Forest accessibility}: $x_{\gamma,i}$ is proportional to the total weight of spanning forests of the graph rooted at the peak set, with edge weights weighted by $\gamma$.
+\end{enumerate}
+
+The parameter $\gamma$ controls the \emph{effective path length}. For $\gamma \to 0$, $x_\gamma \to v_0$ (peaks only). For $\gamma \to 1$, $x_\gamma$ approaches the stationary distribution $\pi$ (global mixing). We tested $\gamma \in \{0.5, 0.7, 0.85, 0.95\}$; at 10\,kb with TF peaks, $\gamma = 0.85$ works best. At 40\,kb with ATAC peaks, RFA gives no signal (MDR$=0.067$), consistent with the hypothesis that the signal lives at fine scales and is sensitive to the type of $v_0$.
+
+\subsection{Per-Gene Scoring and Baselines}
+
+Let $\mathcal{G}$ be the set of genes with a promoter annotation. For each gene $g$, let $b(g)$ be the bin containing its promoter ($b(g) = \lfloor \mathrm{start}(g)/r \rfloor$). Define
+\begin{equation}
+\mathrm{RFA}(g) := x_{\gamma, b(g)}.
+\end{equation}
+
+We compare RFA against three baselines:
+\begin{enumerate}
+    \item \textbf{1D distance}: $D_{1D}(g) = \min_{p \in \mathrm{peaks}} |\mathrm{start}(g) - p|$.
+    \item \textbf{Direct contact (ChIPSP proxy)}: $\mathrm{DC}(g) = \max_{p \in \mathrm{peaks}} A_{b(g), p}$.
+    \item \textbf{Combined model}: $\mathrm{Comb}(g) = z(\mathrm{RFA}(g)) + z(\mathrm{DC}(g))$, where $z(\cdot)$ is z-score normalization.
+\end{enumerate}
+
+For a continuous target $y_g$, we report Spearman $\rho(\mathrm{RFA}, y)$ and partial $\rho(\mathrm{RFA}, y \mid D_{1D}, \mathrm{DC})$, obtained by rank-residualizing both variables against the controls. For binary classification $y_g \in \{0,1\}$, we report ROC-AUC, with DeLong-style bootstrap ($B=1000$) for $\Delta \mathrm{AUC}$.
+
+\subsection{Statistical Properties}
+
+\textbf{Why does RFA outperform direct contact on promoter count?} At high resolution (10\,kb), direct contacts are noisy: each bin contains few counts, and $\mathrm{DC}(g)$ has high variance. The RFA profile is a smoothed version of $v_0$ obtained by convolving along the graph structure; its variance is reduced by averaging over all paths. Let $v_0$ be a noisy indicator of peaks and $\mu_0 = \mathbb{E}[v_0]$. Then
+\begin{equation}
+\mathbb{E}[x_\gamma] = (I-\gamma P)^{-1} \mu_0, \qquad \mathrm{Var}[x_\gamma] = (I-\gamma P)^{-1} \mathrm{Var}[v_0] \big((I-\gamma P)^{-1}\big)^\top.
+\end{equation}
+Since $(I-\gamma P)^{-1}$ is a contraction-like operator on the subspace orthogonal to the stationary distribution, the variance of $x_\gamma$ is strictly smaller than that of $v_0$ in the relevant directions, while the mean is preserved. This is the graph analog of the bias-variance trade-off.
+
+\textbf{Why does RFA anticorrelate with eQTL?} The smoothing argument above explains why RFA outperforms DC on promoter count, but it does \emph{not} predict anticorrelation with eQTL. Empirically, $\mathrm{AUC}(\mathrm{RFA}) = 0.386$ and $\mathrm{AUC}(-\mathrm{RFA}) = 0.614$ on eQTL, and $\mathrm{AUC}(\mathrm{RFA})$ decreases with eQTL strength (Section~5.3). We interpret this as follows: eQTL genes are expressed, but with stronger eQTL they are more \emph{buffered}, i.e., less dependent on 3D accessibility. RFA, being a smoothed accessibility score, is higher for genes whose expression is more strongly driven by 3D contacts, and lower for buffered genes with strong eQTL. This is a hypothesis, not a theorem, and it is stated as such in Section~6.3.
+
+\textbf{Why does the combined model fail?} Let $X = \mathrm{RFA}$ and $Y = \mathrm{DC}$. Suppose $X = S(Y) + \varepsilon$ where $S$ is smoothing and $\varepsilon$ is noise. Then $\mathrm{AUC}(X+Y) \leq \mathrm{AUC}(X)$ whenever $\varepsilon$ dominates, because $Y$ reintroduces the noise $\varepsilon$ that $S$ removed. On eQTL, the combined model also fails ($\mathrm{AUC}=0.561$ vs $\mathrm{RFA}$ alone), but for a different reason: RFA and DC anticorrelate with eQTL in different ways, so $z(\mathrm{RFA}) + z(\mathrm{DC})$ partially cancels the anticorrelation.
+
+\section{Data}
+
+\subsection{Hi-C}
+We use GM12878 in situ Hi-C (ENCODE/4DN, \texttt{4DNFIZGCA8AH.hic}) at 10\,kb resolution \cite{rao2014} for chromosomes 1, 17, and 19, extracted with \texttt{juicer\_tools dump observed NONE} and converted to dense \texttt{.npy} (int32) via a sparse-triplet converter. For MCF10A and MCF7, we use 40\,kb matrices for the same chromosomes (\texttt{MCF\{10A,7\}\_chr\{1,17,19\}\_40kb\_fixed.npy}). The 10\,kb matrices have 24\,895, 8\,325, and 5\,861 bins for chr1, chr17, and chr19 respectively, with nnz/$n^2$ of 0.012, 0.030, and 0.044; the sizes match chromosome lengths.
+
+\subsection{TFBS (GM12878)}
+Peaks are taken from \texttt{tfbs\_GM12878.bed} (BED6). We test 20 TFs: IKZF1, CTCF, SMC3, RAD21, PAX5, EBF1, EP300, POLR2A, YY1, GABPA, MAX, E2F4, ELF1, TCF12, BATF, BCL11A, IRF4, MEF2A, NRF1, and ZNF143.
+
+\subsection{ATAC peaks (MCF10A / MCF7)}
+For MCF7 we use IDR-thresholded peaks from GEO GSE169929 (\texttt{GSE169929\_ENCFF882OVP\_...bed.gz}); for MCF10A, broadPeak calls from GEO GSM3735772. Only the first three columns (chrom, start, end) are used; $v_0$ is the indicator of bins containing an ATAC peak. ATAC peaks mark accessible regulatory DNA \cite{thurman2012}.
+
+\subsection{eQTL (GTEx v10 LCL)}
+We use \texttt{QTD000221.all.tsv.gz} from the eQTL Catalogue (EBI), corresponding to GTEx v10 LCL (study \texttt{QTS000015}, dataset \texttt{QTD000221}), \texttt{quant\_method=ge}, \texttt{sample\_size=326}. The file is streamed in 2M-row chunks; for each gene we record $p_{\min}$ and $n_{\mathrm{sig}}$ (number of variants with $p<5\times10^{-8}$), and define $\mathrm{eqtl\_bin} = \mathbb{1}[n_{\mathrm{sig}}>0]$. The result is 18\,988 genes, of which 1\,567 (8.3\%) have at least one significant variant. The eQTL Catalogue provides uniformly reprocessed summary statistics
+\cite{kerimov2021}.
+
+\subsection{RNA (MCF10A / MCF7)}
+We use \texttt{MCF10A\_RNA.tsv} (16\,829 genes) and \texttt{MCF7\_RNA.tsv} (19\,154 genes), with columns \texttt{gene\_id}, \texttt{gene\_name}, and \texttt{TPM}; there are no NAs and gene IDs are without version suffixes.
+
+\subsection{Gene annotation}
+Promoters are taken from \texttt{gene\_structure\_hg38.csv} (\texttt{element\_type=='promoter'}, first promoter per gene, \texttt{chrom} without \texttt{chr}). This yields 1043, 538, and 739 promoters on chr1, chr17, and chr19.
+
+\subsection{Promoter TF count}
+The promoter count matrix \texttt{matrix\_with\_hic\_enhancers.csv} contains 811 genes on chr1 with TF peak counts in the window $[-2000, +200]$\,bp from TSS (not score sums). It was built for chr1 only; for chr17/19 we merge directly with the eQTL target.
+
+\section{Methods}
+
+\subsection{Pipeline}
+The pipeline is:
+\begin{verbatim}
+Hi-C .npy -> build_markov_matrix(topk=300, PC1-residualize) -> P
+v0 (TF peaks / ATAC peaks) -> rfa_profile(P, v0, gamma=0.85) -> x_gamma
+x_gamma[bin(gene)] -> RFA(gene)
+\end{verbatim}
+
+The same flow is shown schematically in Figure~\ref{fig:pipeline}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig_pipeline.pdf}
+\caption{Data-processing pipeline. Hi-C contacts are sparsified
+(top-$k{=}300$), symmetrized and residualized against PC1 to build the
+Markov transition matrix $P=D^{-1}A$. The RFA profile is the solution of
+$(I-\gamma P)x=v_0$ with $\gamma=0.85$ and $v_0$ the TF/ATAC peak
+indicator. Per-gene scores $\mathrm{RFA}(g)=x_{\gamma,b(g)}$ are tested
+on eQTL (AUC of RFA and of $-$RFA) and on $\Delta$RNA (Spearman $\rho$,
+MDR), against 1D distance, direct contact and PC1 baselines.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Metrics}
+We use ROC-AUC for binary targets; Spearman $\rho$ for continuous targets; partial Spearman by rank-residualizing both variables on controls; bootstrap CI (1000 resamples) for $\Delta$AUC and partial; permutation $p$ (500 permutations) for $\rho$ and AUC; and MDR (minimum detectable $\rho$) via Fisher $z$: $\tanh((z_\alpha + z_\beta)/\sqrt{n-3})$.
+
+\textbf{Direction check.} Both $\mathrm{AUC}(\mathrm{RFA})$ and $\mathrm{AUC}(-\mathrm{RFA})$ are reported. If $\mathrm{AUC}(\mathrm{RFA})<0.5<\mathrm{AUC}(-\mathrm{RFA})$, RFA anticorrelates with the target. \textbf{No sign flip is applied} --- a flip would mask anticorrelation. In an earlier version of the pipeline, an automatic flip produced ``AUC=0.611''; in the final dose-response analysis the flip is removed.
+
+\subsection{Controls}
+We use 1D distance, direct contact (dc), PC1 (compartment), baseline RNA, permutation null, within-line sanity, and the direction check.
+
+\section{Results}
+
+\subsection{Promoter TF count (GM12878 chr1, 10\,kb, 811 genes)}
+\begin{table}[h]
+\centering
+\begin{tabular}{lc}
+\toprule
+Metric & Value \\
+\midrule
+Mean AUC 1D & \textbf{0.976} \\
+Mean AUC RFA & 0.836 \\
+Mean AUC ChIPSP & 0.618 \\
+Mean $\Delta$AUC(RFA $-$ 1D) & \textbf{$-0.140$} (0/20 TFs) \\
+Mean partial RFA $\mid$ (1D, dc) & $+0.141$ (17/20 CI$>0$) \\
+Mean partial RFA $\mid$ PC1 & $+0.348$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+1D wins because the target (``is there a peak in the promoter $\pm2$\,kb'') and the 1D distance answer the same question. This is a methodological artifact, not a property of RFA. Partial $\mid$ 1D $= -0.068$: RFA does not add over 1D.
+
+\subsection{eQTL: anticorrelation (GTEx v10 LCL, chr1+17+19, 10\,kb, 1625 genes, 124 positives)}
+\begin{table}[h]
+\centering
+\begin{tabular}{lc}
+\toprule
+Metric & Value \\
+\midrule
+Mean AUC(RFA) & \textbf{0.386} (below chance) \\
+Mean AUC($-$RFA) & \textbf{0.614} (above chance) \\
+Mean AUC 1D & 0.422 \\
+Mean AUC dc & 0.428 \\
+$\rho_{\mathrm{RFA}}$ on $-\log_{10} p_{\min}$ & $\mathbf{-0.09}$ (19/20 negative) \\
+partial RFA $\mid$ (1D, dc) & $-0.03$ (0/20 CI$>0$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+RFA \emph{anticorrelates} with eQTL. High RFA corresponds to fewer eQTL. $\mathrm{AUC}(\mathrm{RFA})=0.386$ is below chance, which is the anticorrelation; $\mathrm{AUC}(-\mathrm{RFA})=0.614$ is above chance after sign inversion. No sign flip is applied. Genes with strong eQTL are less accessible in 3D (high RFA $\rightarrow$ fewer eQTL). A possible mechanism is \emph{expression buffering}: genes with strong eQTL have more buffered expression, less dependent on 3D accessibility. Alternative: RFA captures expression status (eQTL genes are expressed, but with weaker effects).
+
+\subsection{eQTL dose-response: AUC(RFA) decreases with eQTL strength}
+Figure~\ref{fig:dose} shows the mean dose-response curve; full tables for all 20 TFs are given in Appendix~S2. The mean $\mathrm{AUC}(Q4) - \mathrm{AUC}(Q1) = -0.056$, with 19/20 TFs showing a negative trend. RFA anticorrelates with eQTL strength: stronger eQTL corresponds to lower AUC(RFA). This is stable and confirms Section~5.2.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{fig_dose.pdf}
+\caption{Mean AUC(RFA) across eQTL strength quantiles (Q1 weak to Q4 strong). The line is the mean over 20 TFs; shaded area is $\pm$1 SD. AUC(RFA) decreases with eQTL strength (trend $-0.056$).}
+\label{fig:dose}
+\end{figure}
+
+\subsection{$\Delta$RNA (MCF10A vs MCF7, 40\,kb, ATAC peaks, 1730 genes)}
+\begin{table}[h]
+\centering
+\begin{tabular}{lc}
+\toprule
+Metric & Value \\
+\midrule
+$\rho(\Delta\mathrm{RFA}, \Delta\mathrm{RNA})$ & $\mathbf{+0.0047}$ \\
+perm $p$ & 0.866 \\
+null 95\% CI & $[-0.047, +0.050]$ \\
+\textbf{MDR} ($n=1730$, power$=0.80$) & $\mathbf{0.067}$ \\
+observed $|\rho|$ & 0.0047 (\textbf{14$\times$ below MDR}) \\
+per-chr $\rho$ & chr1 $-0.031$, chr17 $+0.005$, chr19 $-0.000$ \\
+$\rho(\mathrm{RFA}_{10A}, \mathrm{RNA}_{10A})$ & $-0.004$ ($p=0.87$) \\
+$\rho(\mathrm{RFA}_{7}, \mathrm{RNA}_{7})$ & $+0.025$ ($p=0.30$) \\
+partial $\mid$ baseline RNA & $-0.022$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+$\Delta$RFA does not predict $\Delta$RNA. The effect is 14$\times$ below MDR --- absence of effect, not lack of power. Within-line sanity is also zero: RFA does not proxy expression at 40\,kb with ATAC peaks. Figure~\ref{fig:delta} shows the scatter.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.6\textwidth]{fig_delta.pdf}
+\caption{$\Delta$RFA vs $\Delta$RNA (MCF10A vs MCF7, 40\,kb, ATAC peaks, 1730 genes). The regression line is flat ($\rho=+0.005$), consistent with the absence of signal.}
+\label{fig:delta}
+\end{figure}
+
+\section{Discussion}
+
+\subsection{What RFA does}
+RFA anticorrelates with eQTL at 10\,kb with TF peaks ($\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$, 19/20 TFs). It is not a proxy for direct contact ($\rho(\mathrm{RFA},\mathrm{dc})=0.58$, 0/20 $>0.8$) and not a proxy for compartments (partial RFA $\mid$ PC1 $=+0.35$).
+
+\subsection{What RFA does not do}
+RFA does not predict $\Delta$RNA at 40\,kb with ATAC peaks ($\rho=0.005$, MDR$=0.067$). It does not add over 1D on promoter count (partial $\mid$ 1D $= -0.068$). It does not predict eQTL in the positive direction --- only anticorrelates.
+
+\subsection{Why anticorrelation?}
+Three non-exclusive hypotheses: (i) \textbf{expression buffering}: genes with strong eQTL have more stable expression, less dependent on 3D accessibility; (ii) \textbf{RFA captures expression status}: eQTL genes are expressed, and RFA correlates with expression (indirectly), but with eQTL strength inversely; (iii) \textbf{target artifact}: eQTL is a genetic layer, RFA is epigenetic, and the anticorrelation may reflect layer mismatch. We state all three explicitly, without choosing one without further data.
+
+\subsection{Limitations}
+First, resolution: 10\,kb is the working range; 40\,kb is not. Second, $v_0$: TF peaks give signal (anticorrelation); ATAC peaks do not. Third, target: eQTL is a genetic layer; $\Delta$RNA is dynamic and noisy. Fourth, PC1 residualization: post-hoc residualization does not remove PC1 (ratio$=0.623$). Fifth, single cell line/tissue: GM12878 + LCL; MCF10A/7. Sixth, sign flip: the automatic flip in the earlier pipeline masked anticorrelation; the final analysis uses explicit direction.
+
+\subsection{Positioning}
+``Continuous topological accessibility as a resolution-dependent 3D-aware GRN filter'': RFA anticorrelates with eQTL at 10\,kb with TF peaks and does not predict $\Delta$RNA at 40\,kb with ATAC. This is not a ``universal predictor'' but a filter with an inverted sign on eQTL and no signal on $\Delta$RNA. The applicability domain is static eQTL association at 10\,kb with TF peaks.
+
+\section{Conclusion}
+RFA anticorrelates with eQTL at 10\,kb with TF peaks ($\mathrm{AUC}(\mathrm{RFA})=0.386$, $\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$). RFA does not predict $\Delta$RNA at 40\,kb with ATAC peaks ($\rho=0.005$, MDR$=0.067$). The anticorrelation may reflect expression buffering. The negative $\Delta$RNA result delineates the applicability boundary: RFA measures static accessibility, not dynamics. A methodological warning follows: a sign flip in AUC masks anticorrelation, so dose-response and explicit direction are mandatory.
+
+\appendix
+\section{Reproducibility}
+Hi-C data were extracted with \texttt{juicer\_tools dump} and converted with \texttt{converter.py}. The $P$ matrix is built with \texttt{build\_markov\_matrix(topk=300, PC1-residualize)} and cached in \texttt{E:\textbackslash HIC\textbackslash results\textbackslash\{pilot\_multitf,eqtl\_multi\_chr,delta\_rfa\}}. The eQTL target is built by \texttt{eqtl\_target.py} (streaming GTEx v10 LCL). All scripts are listed in the companion code repository.
+
+\section{Full dose-response tables}
+Complete tables for all 20 TFs (4 quantiles of $-\log_{10} p_{\min}$ and 5 bins of $n_{\mathrm{sig}}$) are given in the supplementary CSV \texttt{eqtl\_dose\_response.csv}.
+
+\section{Parameters}
+$\gamma=0.85$, top-$k=300$, PC1 residualization, 10\,kb (GM12878) / 40\,kb (MCF). Bootstrap: 1000; permutation: 500. Minimum gene count per analysis: 20--50.
+
+\section{Sign-flip correction}
+The earlier pipeline applied \texttt{rfa\_for\_auc = -rfa if auc\_rfa\_neg > auc\_rfa else rfa}, yielding $\mathrm{AUC}=0.611$. Without the flip: $\mathrm{AUC}(\mathrm{RFA})=0.386$, $\mathrm{AUC}(-\mathrm{RFA})=0.614$. The final dose-response removes the flip. The article uses the no-flip values with explicit direction.
+
+
+\begin{thebibliography}{9}
+
+\bibitem{dekker2013}
+Dekker J, Marti-Renom MA, Mirny LA.
+Exploring the three-dimensional organization of genomes: interpreting chromatin interaction data.
+\textit{Nat Rev Genet}. 2013;14(6):390--403.
+doi:10.1038/nrg3454.
+
+\bibitem{hu2013}
+Hu M, Deng K, Qin Z, Liu JS.
+Understanding spatial organizations of chromosomes via statistical analysis of Hi-C data.
+\textit{Quant Biol}. 2013;1(2):156--174.
+doi:10.1007/s40484-013-0016-0.
+
+\bibitem{rao2014}
+Rao SSP, Huntley MH, Durand NC, Stamenova EK, Bochkov ID, Robinson JT, et al.
+A 3D map of the human genome at kilobase resolution reveals principles of chromatin looping.
+\textit{Cell}. 2014;159(7):1665--1680.
+doi:10.1016/j.cell.2014.11.021.
+
+\bibitem{thurman2012}
+Thurman RE, Rynes E, Humbert R, Vierstra J, Maurano MT, Haugen E, et al.
+The accessible chromatin landscape of the human genome.
+\textit{Nature}. 2012;489(7414):75--82.
+doi:10.1038/nature11232.
+
+\bibitem{kerimov2021}
+Kerimov N, Hayhurst JD, Peikova K, Manning JR, Walter P, Kolberg L, et al.
+A compendium of uniformly processed human gene expression and splicing quantitative trait loci.
+\textit{Nat Genet}. 2021;53(9):1290--1299.
+doi:10.1038/s41588-021-00924-w.
+
+\end{thebibliography}
+
+\end{document}
