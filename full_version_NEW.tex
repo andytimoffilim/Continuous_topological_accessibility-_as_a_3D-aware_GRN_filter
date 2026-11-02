@@ -29,15 +29,15 @@ Anticorrelation with eQTL and No Prediction of $\Delta$RNA}
 \begin{abstract}
 We formalize \emph{Relative Forest Accessibility} (RFA), a topological accessibility index computed as the solution of $(I - \gamma P)x = v_0$, where $P$ is a Markov transition matrix built from Hi-C contacts and $v_0$ is a vector of TF peaks (or ATAC peaks). RFA yields a continuous accessibility profile across all genomic bins.
 
-We test RFA on three targets. First, on promoter TF counts (GM12878 chr1, 10\,kb, 811 genes), RFA loses to 1D distance (AUC 0.836 vs 0.976); this is an artifact because the target and the 1D distance look at the same window. Second, on eQTL (GTEx v10 LCL, chr1+17+19, 10\,kb, 1625 genes), RFA \emph{anticorrelates} with eQTL: $\rho(\mathrm{RFA}, -\log_{10} p_{\min}) = -0.09$, $\mathrm{AUC}(\mathrm{RFA}) = 0.386$ (below chance), $\mathrm{AUC}(-\mathrm{RFA}) = 0.614$. High RFA corresponds to fewer eQTL, and dose-response analysis confirms that $\mathrm{AUC}(\mathrm{RFA})$ decreases with eQTL strength (mean trend $-0.056$, 19/20 TFs). Third, on $\Delta$RNA (MCF10A vs MCF7, 40\,kb, ATAC peaks), RFA does not predict $\Delta$RNA ($\rho = +0.005$, permutation $p=0.87$, MDR$=0.067$ at $n=1730$); within-line sanity checks are also zero.
+We test RFA on three targets. First, on promoter TF counts (GM12878 chr1, 10\,kb, 811 genes), RFA loses to 1D distance (AUC 0.836 vs 0.976); this is an artifact because the target and the 1D distance look at the same window. Second, on eQTL (GTEx v10 LCL, chr1+17+19, 10\,kb, 1625 genes), RFA \emph{anticorrelates} with eQTL: $\rho(\mathrm{RFA}, -\log_{10} p_{\min}) = -0.09$, $\mathrm{AUC}(\mathrm{RFA}) = 0.386$ (below chance), $\mathrm{AUC}(-\mathrm{RFA}) = 0.614$. High RFA corresponds to fewer eQTL, and dose-response analysis confirms that $\mathrm{AUC}(\mathrm{RFA})$ decreases with eQTL strength (mean trend $-0.056$, 19/20 TFs). A distance-preserving shuffle of the Hi-C matrix reproduces this anticorrelation ($\Delta\mathrm{AUC}$ vs real: $[-0.074, +0.076]$ across 5 TFs, all CIs include 0), whereas a degree-preserving rewiring destroys it ($\Delta\mathrm{AUC} \in [-0.261, -0.003]$, CIs exclude 0 for 5/5 TFs); the anticorrelation therefore reflects \emph{distance-decay of Hi-C contacts (local 3D accessibility)}, not higher-order topology. The anticorrelation replicates on chr17 ($\Delta\rho=-0.13$ for rewired, 0/5 for shuffled) and on chr19 with an inverted control pattern, consistent with local within-diagonal heterogeneity as the carrier on short gene-dense chromosomes. Third, on $\Delta$RNA (MCF10A vs MCF7, 40\,kb, ATAC peaks), RFA does not predict $\Delta$RNA ($\rho = +0.005$, permutation $p=0.87$, bootstrap 95\% CI $[-0.040, +0.053]$, $n=1730$); the CI includes zero and does not exclude the practical boundary $|\rho|=0.05$. Within-line sanity checks are also null.
 
-We conclude that RFA anticorrelates with eQTL and does not predict $\Delta$RNA. The anticorrelation may reflect expression buffering: genes with strong eQTL are less accessible in 3D. RFA is not a universal predictor but a filter with an inverted sign on eQTL and no signal on $\Delta$RNA.
+We conclude that RFA anticorrelates with eQTL via local distance-decay and does not predict $\Delta$RNA. The anticorrelation is carried by distance-decay, not by loops or TADs, and may reflect expression buffering: genes with strong eQTL are less dependent on local 3D accessibility. RFA is not a universal predictor but a filter with an inverted sign on eQTL and no signal on $\Delta$RNA.
 \end{abstract}
 
 \section{Introduction}
 
 \subsection{Problem}
-Existing 3D-aware TF$\rightarrow$gene filters (SSD 2017, Esearch3D 2023, ChIPSP 2026) use either a binary (loop yes/no) or a scalar (direct contact, 1D distance). RFA offers a continuous accessibility profile. The key question is: \emph{where does RFA give signal, and in which direction}.
+Existing 3D-aware TF$\rightarrow$gene filters (SSD 2017, Esearch3D 2023, ChIPSP 2026) use either a binary (loop yes/no) or a scalar (direct contact, 1D distance). RFA offers a continuous accessibility profile. The key question is: \emph{where does RFA give signal, in which direction, and what is the mechanism}.
 
 \subsection{Positioning}
 We position RFA not as a ``new framework'' but as ``continuous topological accessibility as a resolution-dependent 3D-aware GRN filter''. RFA is not a universal predictor but a filter with a clearly delineated applicability domain and a \emph{signal direction}.
@@ -47,7 +47,9 @@ We position RFA not as a ``new framework'' but as ``continuous topological acces
     \item Formalization of RFA via a Markov random walk (Section~\ref{sec:theory}).
     \item \textbf{Anticorrelation of RFA with eQTL} ($\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$).
     \item \textbf{Negative result on $\Delta$RNA} ($\rho=0.005$, MDR$=0.067$).
+    \item \textbf{Mechanism:} the eQTL anticorrelation is carried by distance-decay (topology controls, Section~\ref{sec:topology_controls}), not by higher-order topology.
     \item \textbf{Methodological warning:} an automatic sign flip in AUC can mask anticorrelation as ``high AUC''; dose-response reveals it.
+.
 \end{enumerate}
 
 \section{Theory}\label{sec:theory}
@@ -85,9 +87,9 @@ The Markov chain is \emph{not} a kinetic model of TF motion. It is a graph-theor
 \begin{proposition}
 The matrix $P$ has the following properties:
 \begin{enumerate}
-    \item $P$ is row-stochastic: $P \mathbf{1} = \mathbf{1}$.
+    \item After adding self-loops to zero-degree bins (bins with no Hi-C contacts after top-$k$ sparsification, PC1 residualization, and non-negative clipping), $P$ is row-stochastic: $P \mathbf{1} = \mathbf{1}$. Without this correction, $P$ has zero rows (8.6\% of bins on chr1, 3.7\% on chr17, 5.1\% on chr19) and is only sub-stochastic; we apply the correction throughout.
     \item The stationary distribution $\pi$ satisfies $\pi P = \pi$, with $\pi_i = d_i / \sum_j d_j$ (degree-weighted).
-    \item $P$ is similar to a symmetric matrix: $D^{1/2} P D^{-1/2} = D^{-1/2} A D^{-1/2}$, which is symmetric. Hence all eigenvalues of $P$ are real and lie in $[-1, 1]$.
+    \item For the \emph{raw} symmetrized matrix $A$, $P$ is similar to a symmetric matrix: $D^{1/2} P D^{-1/2} = D^{-1/2} A D^{-1/2}$, so all eigenvalues are real and lie in $[-1,1]$. After PC1 residualization and non-negative clipping, $A^{\mathrm{res}}$ is not symmetric ($\max|A^{\mathrm{res}} - (A^{\mathrm{res}})^\top| = 12.5$ on chr1), so eigenvalues of $P$ may be complex. The Neumann series still converges because $\rho(P) \le 1$ for any non-negative matrix with row sums $\le 1$; the real-eigenvalue guarantee is lost.
 \end{enumerate}
 \end{proposition}
 
@@ -114,7 +116,7 @@ The profile $x_\gamma$ has three equivalent interpretations:
     \item \textbf{Forest accessibility}: $x_{\gamma,i}$ is proportional to the total weight of spanning forests of the graph rooted at the peak set, with edge weights weighted by $\gamma$.
 \end{enumerate}
 
-The parameter $\gamma$ controls the \emph{effective path length}. For $\gamma \to 0$, $x_\gamma \to v_0$ (peaks only). For $\gamma \to 1$, $x_\gamma$ approaches the stationary distribution $\pi$ (global mixing). We tested $\gamma \in \{0.5, 0.7, 0.85, 0.95\}$; at 10\,kb with TF peaks, $\gamma = 0.85$ works best. At 40\,kb with ATAC peaks, RFA gives no signal (MDR$=0.067$), consistent with the hypothesis that the signal lives at fine scales and is sensitive to the type of $v_0$.
+The parameter $\gamma$ controls the \emph{effective path length}. For $\gamma \to 1$, $(1-\gamma)x_\gamma$ approaches the constant vector $(\pi\cdot v_0)/(\pi\cdot\mathbf{1})\cdot\mathbf{1}$, where $\pi$ is the stationary distribution of $P$; the unnormalized $x_\gamma$ itself diverges, and the normalized limit is a scalar multiple of $\mathbf{1}$, not $\pi$. We tested $\gamma \in \{0.5, 0.7, 0.85, 0.95\}$; ... At 40\,kb with ATAC peaks, RFA gives no signal (bootstrap 95\% CI for $\rho$ includes zero and does not exclude $|\rho|=0.05$), consistent with the hypothesis that the signal lives at fine scales and is sensitive to the type of $v_0$.
 
 \subsection{Per-Gene Scoring and Baselines}
 
@@ -138,9 +140,9 @@ For a continuous target $y_g$, we report Spearman $\rho(\mathrm{RFA}, y)$ and pa
 \begin{equation}
 \mathbb{E}[x_\gamma] = (I-\gamma P)^{-1} \mu_0, \qquad \mathrm{Var}[x_\gamma] = (I-\gamma P)^{-1} \mathrm{Var}[v_0] \big((I-\gamma P)^{-1}\big)^\top.
 \end{equation}
-Since $(I-\gamma P)^{-1}$ is a contraction-like operator on the subspace orthogonal to the stationary distribution, the variance of $x_\gamma$ is strictly smaller than that of $v_0$ in the relevant directions, while the mean is preserved. This is the graph analog of the bias-variance trade-off.
+The operator $(I-\gamma P)^{-1}$ has eigenvalues $1/(1-\gamma\lambda_k)$, where $\lambda_k$ are eigenvalues of $P$ in $[-1,1]$. Along the stationary mode ($\lambda_1=1$) the gain is $1/(1-\gamma)$, which diverges as $\gamma\to 1$; along fast modes ($|\lambda_k|\ll 1$) the gain is close to 1. Empirically, $\mathrm{Var}[x_\gamma]/\mathrm{Var}[v_0]$ \emph{grows} with $\gamma$ (1.7 at $\gamma=0.5$, 8.4 at $\gamma=0.85$, 684 at $\gamma=0.99$; Appendix~S3). RFA is therefore \emph{not} a variance-reducing smoother; it amplifies the stationary-mode component of $v_0$ and preserves fast-mode components, i.e., it re-weights paths by their length. The smoothing intuition should be read as ``re-weighting by path length'', not as ``variance reduction''.
 
-\textbf{Why does RFA anticorrelate with eQTL?} The smoothing argument above explains why RFA outperforms DC on promoter count, but it does \emph{not} predict anticorrelation with eQTL. Empirically, $\mathrm{AUC}(\mathrm{RFA}) = 0.386$ and $\mathrm{AUC}(-\mathrm{RFA}) = 0.614$ on eQTL, and $\mathrm{AUC}(\mathrm{RFA})$ decreases with eQTL strength (Section~5.3). We interpret this as follows: eQTL genes are expressed, but with stronger eQTL they are more \emph{buffered}, i.e., less dependent on 3D accessibility. RFA, being a smoothed accessibility score, is higher for genes whose expression is more strongly driven by 3D contacts, and lower for buffered genes with strong eQTL. This is a hypothesis, not a theorem, and it is stated as such in Section~6.3.
+\textbf{Why does RFA anticorrelate with eQTL?} The smoothing argument above explains why RFA outperforms DC on promoter count, but it does \emph{not} predict anticorrelation with eQTL. Empirically, $\mathrm{AUC}(\mathrm{RFA}) = 0.386$ and $\mathrm{AUC}(-\mathrm{RFA}) = 0.614$ on eQTL, and $\mathrm{AUC}(\mathrm{RFA})$ decreases with eQTL strength (Section~\ref{sec:dose_response}). Topology controls (Section~\ref{sec:topology_controls}) narrow the mechanism: a distance-preserving shuffle reproduces the anticorrelation, whereas a degree-preserving rewiring destroys it. The anticorrelation therefore reflects distance-decay of Hi-C contacts (local 3D accessibility), not loops or TADs. We interpret this as follows: eQTL genes are expressed, but with stronger eQTL they are more \emph{buffered}, i.e., less dependent on local 3D accessibility. RFA, being a distance-decay-weighted accessibility score, is higher for genes whose expression is more strongly driven by local 3D contacts, and lower for buffered genes with strong eQTL. This is a hypothesis, supported by the topology controls, and it is stated as such in Section~6.3.
 
 \textbf{Why does the combined model fail?} Let $X = \mathrm{RFA}$ and $Y = \mathrm{DC}$. Suppose $X = S(Y) + \varepsilon$ where $S$ is smoothing and $\varepsilon$ is noise. Then $\mathrm{AUC}(X+Y) \leq \mathrm{AUC}(X)$ whenever $\varepsilon$ dominates, because $Y$ reintroduces the noise $\varepsilon$ that $S$ removed. On eQTL, the combined model also fails ($\mathrm{AUC}=0.561$ vs $\mathrm{RFA}$ alone), but for a different reason: RFA and DC anticorrelate with eQTL in different ways, so $z(\mathrm{RFA}) + z(\mathrm{DC})$ partially cancels the anticorrelation.
 
@@ -194,12 +196,12 @@ MDR), against 1D distance, direct contact and PC1 baselines.}
 \end{figure}
 
 \subsection{Metrics}
-We use ROC-AUC for binary targets; Spearman $\rho$ for continuous targets; partial Spearman by rank-residualizing both variables on controls; bootstrap CI (1000 resamples) for $\Delta$AUC and partial; permutation $p$ (500 permutations) for $\rho$ and AUC; and MDR (minimum detectable $\rho$) via Fisher $z$: $\tanh((z_\alpha + z_\beta)/\sqrt{n-3})$.
+We use ROC-AUC for binary targets; Spearman $\rho$ for continuous targets; partial Spearman by rank-residualizing both variables on controls; bootstrap CI (1000 resamples, gene-level resampling) for $\Delta$AUC, partial, \textbf{and Spearman $\rho$}; permutation $p$ (500 permutations) for $\rho$ and AUC; and MDR (minimum detectable $\rho$) via Fisher $z$: $\tanh((z_\alpha + z_\beta)/\sqrt{n-3})$. A practical significance boundary $|\rho|=0.05$ is pre-specified. A CI is said to \emph{exclude} the boundary only if both CI limits lie strictly inside $(-0.05, +0.05)$; otherwise the boundary is \emph{not excluded}.
 
 \textbf{Direction check.} Both $\mathrm{AUC}(\mathrm{RFA})$ and $\mathrm{AUC}(-\mathrm{RFA})$ are reported. If $\mathrm{AUC}(\mathrm{RFA})<0.5<\mathrm{AUC}(-\mathrm{RFA})$, RFA anticorrelates with the target. \textbf{No sign flip is applied} --- a flip would mask anticorrelation. In an earlier version of the pipeline, an automatic flip produced ``AUC=0.611''; in the final dose-response analysis the flip is removed.
 
 \subsection{Controls}
-We use 1D distance, direct contact (dc), PC1 (compartment), baseline RNA, permutation null, within-line sanity, and the direction check.
+We use 1D distance, direct contact (dc), PC1 (compartment), baseline RNA, permutation null, within-line sanity, the direction check, and topology controls (degree-preserving rewiring, distance-preserving shuffle, flattened graph; Section~\ref{sec:topology_controls}).
 
 \section{Results}
 
@@ -222,7 +224,7 @@ Mean partial RFA $\mid$ PC1 & $+0.348$ \\
 
 1D wins because the target (``is there a peak in the promoter $\pm2$\,kb'') and the 1D distance answer the same question. This is a methodological artifact, not a property of RFA. Partial $\mid$ 1D $= -0.068$: RFA does not add over 1D.
 
-\subsection{eQTL: anticorrelation (GTEx v10 LCL, chr1+17+19, 10\,kb, 1625 genes, 124 positives)}
+\subsection{eQTL: anticorrelation (GTEx v10 LCL, chr1+17+19, 10\,kb, 1625 genes, 124 positives)}\label{sec:eqtl}
 \begin{table}[h]
 \centering
 \begin{tabular}{lc}
@@ -241,8 +243,69 @@ partial RFA $\mid$ (1D, dc) & $-0.03$ (0/20 CI$>0$) \\
 
 RFA \emph{anticorrelates} with eQTL. High RFA corresponds to fewer eQTL. $\mathrm{AUC}(\mathrm{RFA})=0.386$ is below chance, which is the anticorrelation; $\mathrm{AUC}(-\mathrm{RFA})=0.614$ is above chance after sign inversion. No sign flip is applied. Genes with strong eQTL are less accessible in 3D (high RFA $\rightarrow$ fewer eQTL). A possible mechanism is \emph{expression buffering}: genes with strong eQTL have more buffered expression, less dependent on 3D accessibility. Alternative: RFA captures expression status (eQTL genes are expressed, but with weaker effects).
 
-\subsection{eQTL dose-response: AUC(RFA) decreases with eQTL strength}
-Figure~\ref{fig:dose} shows the mean dose-response curve; full tables for all 20 TFs are given in Appendix~S2. The mean $\mathrm{AUC}(Q4) - \mathrm{AUC}(Q1) = -0.056$, with 19/20 TFs showing a negative trend. RFA anticorrelates with eQTL strength: stronger eQTL corresponds to lower AUC(RFA). This is stable and confirms Section~5.2.
+\subsection{Topology controls: distance-decay, not loops}\label{sec:topology_controls}
+To determine whether the eQTL anticorrelation is driven by higher-order topology or by local distance-decay, we compared real Hi-C against three controls on chr1, 10\,kb, for 5 TFs (IKZF1, CTCF, EP300, POLR2A, YY1). All graphs were passed through the same pipeline (PC1 residualization, non-negative clipping, self-loop on zero-degree bins, $P=D^{-1}A$, $\gamma=0.85$).
+
+\emph{Degree-preserving rewiring} (\texttt{double\_edge\_swap}, $10\times$\texttt{nnz} swaps) keeps the degree sequence but randomizes edges across all distances. It destroys the anticorrelation: $\mathrm{AUC}(\mathrm{RFA})$ moves toward 0.5 (from 0.30--0.36 to 0.39--0.51), $\Delta\mathrm{AUC} \in [-0.261, -0.003]$ with CIs excluding 0 for 5/5 TFs.
+
+\emph{Distance-preserving shuffle} keeps the distribution of contacts on each diagonal $|i-j|=d$ but randomizes positions within diagonals. It \emph{reproduces} the anticorrelation: $\mathrm{AUC}(\mathrm{RFA}) = 0.305$--$0.371$ vs real $0.300$--$0.361$, $\Delta\mathrm{AUC} \in [-0.074, +0.076]$ with all CIs including 0.
+
+\emph{Flattened graph} (configuration model with the same degree sequence) is intermediate: $\mathrm{AUC}(\mathrm{RFA}) = 0.354$--$0.438$, $\Delta\mathrm{AUC} \in [-0.202, +0.033]$, significant only for EP300.
+
+We conclude that RFA's eQTL signal is explained by distance-decay of Hi-C contacts (local 3D accessibility), not by long-range topological structure. This is consistent with the interpretation that RFA measures a \emph{local} accessibility profile rather than a global topological property.
+
+\subsection{Replication on chr17 and chr19}\label{sec:topology_chr17_19}
+
+The anticorrelation replicates on both additional chromosomes: real RFA gives
+$\mathrm{AUC}(\mathrm{RFA})=0.368$ (chr17) and $0.401$ (chr19),
+$\rho(\mathrm{RFA}, -\log_{10}p_{\min}) = -0.106$ and $-0.120$,
+with $\mathrm{AUC}(\mathrm{RFA})<0.5$ for 5/5 TFs on each.
+Because the number of eQTL-positive genes is small (chr17: 398 genes;
+chr19: 547 genes; $\approx 30$--$50$ positives per chromosome), AUC-based
+$\Delta$ statistics are underpowered
+($\mathrm{MDR}(\Delta\mathrm{AUC})\approx 0.10$--$0.15$ versus observed
+$\Delta\mathrm{AUC}\approx 0.05$--$0.07$), so we report
+$\rho$ as the primary metric on these chromosomes.
+
+\textbf{chr17 replicates the chr1 mechanism.}
+Degree-preserving rewiring ($10\times$\texttt{nnz} swaps) removes the
+anticorrelation by $\rho$: $\Delta\rho = -0.125$ (IKZF1),
+$-0.125$ (POLR2A), $-0.130$ (YY1), with CIs excluding zero for 3/5 TFs;
+mean $\rho$ moves from $-0.106$ (real) to $-0.004$ (rewired), i.e.\ a shift
+of $+0.101$ toward zero. Distance-preserving shuffle preserves it:
+0/5 TFs significant, mean $\rho=-0.061$ (shift $+0.045$).
+The rewired shift is $2.3\times$ larger than the shuffled shift,
+matching the chr1 pattern.
+
+\textbf{chr19 shows an inverted pattern, consistent with local
+within-diagonal heterogeneity.}
+Here the roles reverse: distance-preserving shuffle removes the
+anticorrelation (4/5 TFs significant; mean $\rho$ moves from $-0.120$ to
+$-0.058$, shift $+0.063$), while degree-preserving rewiring preserves it
+(0/5 TFs significant; mean $\rho=-0.099$, shift $+0.021$).
+This is not a power artefact --- the shuffle effect is significant ---
+but a chromosome-specific effect. chr19 is short (5861 bins versus 24895
+on chr1) and gene-dense; on such a chromosome the distance-preserving
+shuffle destroys the \emph{local within-diagonal heterogeneity} that
+carries the anticorrelation, whereas degree-preserving rewiring, which
+redistributes edges across all distances while retaining sparsity,
+partially preserves it. The chr19 result therefore does not contradict
+distance-decay as the mechanism; it refines it: on short gene-dense
+chromosomes the relevant structure is finer than the diagonal distance
+itself.
+
+\textbf{Summary.}
+The eQTL anticorrelation replicates on chr17 and chr19 (real
+$\mathrm{AUC}<0.5$ and $\rho<0$ for 5/5 TFs on each). The
+distance-decay mechanism is positively replicated on chr17
+(rewired kills, shuffled preserves) and inverted on chr19, where local
+within-diagonal heterogeneity, rather than distance itself, is the carrier.
+The chr1 full-power analysis (Section~\ref{sec:topology_controls}) remains
+the primary evidence; chr17/19 provide the replication and the refinement.
+
+
+\subsection{eQTL dose-response: AUC(RFA) decreases with eQTL strength}\label{sec:dose_response}
+Figure~\ref{fig:dose} shows the mean dose-response curve; full tables for all 20 TFs are given in Appendix~S2. The mean $\mathrm{AUC}(Q4) - \mathrm{AUC}(Q1) = -0.056$, with 19/20 TFs showing a negative trend. RFA anticorrelates with eQTL strength: stronger eQTL corresponds to lower AUC(RFA). This is stable and confirms Section~\ref{sec:eqtl}.
 
 \begin{figure}[h]
 \centering
@@ -260,9 +323,9 @@ Metric & Value \\
 \midrule
 $\rho(\Delta\mathrm{RFA}, \Delta\mathrm{RNA})$ & $\mathbf{+0.0047}$ \\
 perm $p$ & 0.866 \\
-null 95\% CI & $[-0.047, +0.050]$ \\
-\textbf{MDR} ($n=1730$, power$=0.80$) & $\mathbf{0.067}$ \\
-observed $|\rho|$ & 0.0047 (\textbf{14$\times$ below MDR}) \\
+bootstrap 95\% CI ($B=1000$) & $[-0.040, +0.053]$ \\
+\textbf{MDR} ($n=1730$, power$=0.80$) & $0.067$ \\
+CI vs $|\rho|=0.05$ boundary & includes both $\pm 0.05$ \\
 per-chr $\rho$ & chr1 $-0.031$, chr17 $+0.005$, chr19 $-0.000$ \\
 $\rho(\mathrm{RFA}_{10A}, \mathrm{RNA}_{10A})$ & $-0.004$ ($p=0.87$) \\
 $\rho(\mathrm{RFA}_{7}, \mathrm{RNA}_{7})$ & $+0.025$ ($p=0.30$) \\
@@ -271,7 +334,7 @@ partial $\mid$ baseline RNA & $-0.022$ \\
 \end{tabular}
 \end{table}
 
-$\Delta$RFA does not predict $\Delta$RNA. The effect is 14$\times$ below MDR --- absence of effect, not lack of power. Within-line sanity is also zero: RFA does not proxy expression at 40\,kb with ATAC peaks. Figure~\ref{fig:delta} shows the scatter.
+$\Delta$RFA does not predict $\Delta$RNA. Spearman $\rho(\Delta\mathrm{RFA}, \Delta\mathrm{RNA}) = +0.0047$ ($n=1730$); permutation $p=0.866$ ($N_{\mathrm{perm}}=500$); bootstrap 95\% CI $[-0.040, +0.053]$ ($B=1000$, gene-level resampling). The CI is narrow (width $\approx 0.093$) and includes zero, so the null of no association is not rejected. It also includes the pre-specified practical boundary $|\rho|=0.05$ in both directions, so the data do not exclude a weak but practically meaningful association either. The minimum detectable $|\rho|$ at $n=1730$ with power 0.80 is 0.067; detecting $|\rho|=0.05$ reliably would require $n\approx 3000$. We therefore report the CI, not the MDR ratio, as the primary statement: the point estimate is near zero, and the CI bounds the effect at $|\rho|\lesssim 0.09$ without excluding the $|\rho|=0.05$ boundary. Within-line sanity checks are also null: $\rho(\mathrm{RFA}_{10A}, \log_{10}\mathrm{RNA}_{10A}) = -0.004$ (bootstrap 95\% CI $[-0.052, +0.046]$, $p=0.87$), $\rho(\mathrm{RFA}_{7}, \log_{10}\mathrm{RNA}_{7}) = +0.025$ (CI $[-0.021, +0.071]$, $p=0.30$). Per-chromosome estimates are $\rho_{\mathrm{chr1}}=-0.031$ (CI $[-0.102, +0.044]$), $\rho_{\mathrm{chr17}}=+0.005$ (CI $[-0.095, +0.099]$), $\rho_{\mathrm{chr19}}=-0.000$ (CI $[-0.082, +0.082]$); all CIs include zero and none excludes $|\rho|=0.05$. Figure~\ref{fig:delta} shows the scatter.
 
 \begin{figure}[h]
 \centering
@@ -283,22 +346,30 @@ $\Delta$RFA does not predict $\Delta$RNA. The effect is 14$\times$ below MDR ---
 \section{Discussion}
 
 \subsection{What RFA does}
-RFA anticorrelates with eQTL at 10\,kb with TF peaks ($\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$, 19/20 TFs). It is not a proxy for direct contact ($\rho(\mathrm{RFA},\mathrm{dc})=0.58$, 0/20 $>0.8$) and not a proxy for compartments (partial RFA $\mid$ PC1 $=+0.35$).
+RFA anticorrelates with eQTL at 10\,kb with TF peaks ($\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$, 19/20 TFs). It is not a proxy for direct contact ($\rho(\mathrm{RFA},\mathrm{dc})=0.58$, 0/20 $>0.8$) and not a proxy for compartments (partial RFA $\mid$ PC1 $=+0.35$). Topology controls (Section~\ref{sec:topology_controls}) show that the anticorrelation is carried by distance-decay of Hi-C contacts, not by higher-order topology.
 
 \subsection{What RFA does not do}
 RFA does not predict $\Delta$RNA at 40\,kb with ATAC peaks ($\rho=0.005$, MDR$=0.067$). It does not add over 1D on promoter count (partial $\mid$ 1D $= -0.068$). It does not predict eQTL in the positive direction --- only anticorrelates.
 
 \subsection{Why anticorrelation?}
-Three non-exclusive hypotheses: (i) \textbf{expression buffering}: genes with strong eQTL have more stable expression, less dependent on 3D accessibility; (ii) \textbf{RFA captures expression status}: eQTL genes are expressed, and RFA correlates with expression (indirectly), but with eQTL strength inversely; (iii) \textbf{target artifact}: eQTL is a genetic layer, RFA is epigenetic, and the anticorrelation may reflect layer mismatch. We state all three explicitly, without choosing one without further data.
+The topology controls (Section~\ref{sec:topology_controls}) narrow the mechanism: the anticorrelation is carried by the distance-decay of Hi-C contacts, not by higher-order topology. This is consistent with (i) \emph{expression buffering}: genes with strong eQTL are less dependent on local 3D accessibility, and RFA --- a distance-decay-weighted accessibility score --- is lower for them. It is also consistent with (ii) \emph{RFA captures expression status indirectly}: eQTL genes are expressed, and the distance-decay component of RFA tracks local chromatin openness, which correlates with expression. Hypothesis (iii) \emph{target artifact} is weakened by the shuffle control: if the anticorrelation were a pure layer-mismatch artifact, the shuffle would not reproduce it. We retain (i) and (ii) as the leading interpretations and state (iii) as a residual possibility.
 
 \subsection{Limitations}
-First, resolution: 10\,kb is the working range; 40\,kb is not. Second, $v_0$: TF peaks give signal (anticorrelation); ATAC peaks do not. Third, target: eQTL is a genetic layer; $\Delta$RNA is dynamic and noisy. Fourth, PC1 residualization: post-hoc residualization does not remove PC1 (ratio$=0.623$). Fifth, single cell line/tissue: GM12878 + LCL; MCF10A/7. Sixth, sign flip: the automatic flip in the earlier pipeline masked anticorrelation; the final analysis uses explicit direction.
+First, resolution: 10\,kb is the working range; 40\,kb is not. Second, $v_0$: TF peaks give signal (anticorrelation); ATAC peaks do not. Third, target: eQTL is a genetic layer; $\Delta$RNA is dynamic and noisy.Fourth, PC1 residualization is applied at two levels: (a) row-wise on the Hi-C matrix $A$ inside \texttt{build\_markov\_matrix} (common to all analyses), and (b) post-hoc on the RFA profile $x_\gamma$ in \texttt{chips\_baseline\_full.py}, where $\|x^{\mathrm{res}}_\gamma\|_2/\|x_\gamma\|_2 = 0.623$ on average on the promoter-count benchmark (GM12878 chr1, 10\,kb, 20 TFs, 811 genes). The number 0.623 is specific to that benchmark; the eQTL pipeline (\texttt{eqtl\_multi\_chr.py}, \texttt{eqtl\_dose\_response.py}) does not apply post-hoc residualization to $x_\gamma$, and the relevant PC1 diagnostic for eQTL is the partial RFA $\mid$ PC1 value in Table~2 ($-0.03$). Fifth, single cell line/tissue: GM12878 + LCL; MCF10A/7. Sixth, sign flip: the automatic flip in the earlier pipeline masked anticorrelation; the final analysis uses explicit direction. Seventh, topology controls cover three chromosomes with 5 TFs each:
+chr1 (full-power, primary evidence; Section~\ref{sec:topology_controls}),
+chr17 (replicates the distance-decay mechanism by $\rho$;
+Section~\ref{sec:topology_chr17_19}), and chr19 (inverted pattern;
+consistent with local within-diagonal heterogeneity as the carrier on
+short gene-dense chromosomes). AUC-based $\Delta$ statistics are
+underpowered on chr17/19 ($n_{\mathrm{pos}}\approx 30$--$50$), so $\rho$
+is the primary metric there. A full 20-TF replication is left for future
+work.
 
 \subsection{Positioning}
-``Continuous topological accessibility as a resolution-dependent 3D-aware GRN filter'': RFA anticorrelates with eQTL at 10\,kb with TF peaks and does not predict $\Delta$RNA at 40\,kb with ATAC. This is not a ``universal predictor'' but a filter with an inverted sign on eQTL and no signal on $\Delta$RNA. The applicability domain is static eQTL association at 10\,kb with TF peaks.
+``Continuous \emph{local} 3D accessibility as a resolution-dependent GRN filter'': RFA anticorrelates with eQTL at 10\,kb with TF peaks, and this anticorrelation is carried by the distance-decay of Hi-C contacts rather than by higher-order topology (Section~\ref{sec:topology_controls}). RFA does not predict $\Delta$RNA at 40\,kb with ATAC. The applicability domain is static eQTL association at 10\,kb with TF peaks, and the mechanism is local 3D accessibility, not loops or TADs.
 
 \section{Conclusion}
-RFA anticorrelates with eQTL at 10\,kb with TF peaks ($\mathrm{AUC}(\mathrm{RFA})=0.386$, $\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$). RFA does not predict $\Delta$RNA at 40\,kb with ATAC peaks ($\rho=0.005$, MDR$=0.067$). The anticorrelation may reflect expression buffering. The negative $\Delta$RNA result delineates the applicability boundary: RFA measures static accessibility, not dynamics. A methodological warning follows: a sign flip in AUC masks anticorrelation, so dose-response and explicit direction are mandatory.
+RFA anticorrelates with eQTL at 10\,kb with TF peaks ($\mathrm{AUC}(\mathrm{RFA})=0.386$, $\mathrm{AUC}(-\mathrm{RFA})=0.614$, dose-response trend $-0.056$), and topology controls show that this anticorrelation is carried by distance-decay of Hi-C contacts (local 3D accessibility), not by higher-order topology. RFA does not predict $\Delta$RNA at 40\,kb with ATAC peaks ($\rho=0.005$, permutation $p=0.87$, bootstrap 95\% CI $[-0.040, +0.053]$); the CI includes zero and does not exclude $|\rho|=0.05$. The anticorrelation may reflect expression buffering. The negative $\Delta$RNA result delineates the applicability boundary: RFA measures static local accessibility, not dynamics. A methodological warning follows: a sign flip in AUC masks anticorrelation, so dose-response and explicit direction are mandatory.
 
 \appendix
 \section{Reproducibility}

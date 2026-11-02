@@ -1,0 +1,51 @@
+================================================================================
+OPERATOR AUDIT — RFA
+================================================================================
+
+[1] Loading cached P / A / PC1 ...
+  chr1 : P (24895, 24895), A (24895, 24895), pc1 (24895,), hic (24895, 24895)
+  chr17: P (8325, 8325), A (8325, 8325), pc1 (8325,)
+  chr19: P (5861, 5861), A (5861, 5861), pc1 (5861,)
+
+[2] P correctness (stochastic, nonneg, zero rows) ...
+  chr1: n=24895, nnz=1445664, P_min=2.467e-09, rowsum_max_dev=1.000e+00, n_bad=2151, stochastic=False, nonneg=True
+       deg: min=0.000e+00 med=1.000e+00 max=1.000e+00
+  chr17: n=8325, nnz=423141, P_min=5.312e-09, rowsum_max_dev=1.000e+00, n_bad=307, stochastic=False, nonneg=True
+       deg: min=0.000e+00 med=1.000e+00 max=1.000e+00
+  chr19: n=5861, nnz=316802, P_min=2.128e-08, rowsum_max_dev=1.000e+00, n_bad=298, stochastic=False, nonneg=True
+       deg: min=0.000e+00 med=1.000e+00 max=1.000e+00
+
+[3] A symmetry: cached A_matrix.npz vs raw rebuilt from .npy ...
+  chr1_cached: n=24895, nnz=1445664, max|A-A^T|=1.250e+01, symmetric=False
+  chr17_cached: n=8325, nnz=423141, max|A-A^T|=6.457e+00, symmetric=False
+  chr19_cached: n=5861, nnz=316802, max|A-A^T|=1.620e+01, symmetric=False
+  rebuilding A_raw from GM12878_chr1_10kb.npy (top-k=300, sym, diag=0)...
+  chr1_raw: n=24895, nnz=7324868, max|A-A^T|=0.000e+00, symmetric=True
+  max|A_cached - A_raw| = 1.844e+01  (cached A is residualized/modified)
+
+[4] gamma -> 1 limit: (1-gamma)(I - gamma P)^{-1} v0 ...
+  v0 (IKZF1 chr1): n_peaks=4345, n_bins=24895
+  target const = (pi.v0)/(pi.1) = 2.903836e-01
+  gamma=0.500: mean_scaled=1.872006e-01, dev_from_const=7.651e-01, dev_from_target=6.619e-01, dev_from_pi=9.522e-01
+  gamma=0.700: mean_scaled=1.954566e-01, dev_from_const=7.048e-01, dev_from_target=6.099e-01, dev_from_pi=9.001e-01
+  gamma=0.850: mean_scaled=2.062042e-01, dev_from_const=6.225e-01, dev_from_target=5.383e-01, dev_from_pi=8.286e-01
+  gamma=0.950: mean_scaled=2.227797e-01, dev_from_const=4.941e-01, dev_from_target=4.265e-01, dev_from_pi=7.167e-01
+  gamma=0.990: mean_scaled=2.437647e-01, dev_from_const=3.077e-01, dev_from_target=2.904e-01, dev_from_pi=5.513e-01
+  gamma=0.999: mean_scaled=2.534885e-01, dev_from_const=2.535e-01, dev_from_target=2.904e-01, dev_from_pi=3.459e-01
+  NOTE: limit is (pi.v0)/(pi.1) * 1, NOT pi. Check: dev_from_target should decrease as gamma->1.
+
+[5] Variance contraction: Var[x_gamma] vs Var[v0] ...
+  gamma=0.500: var_v0=1.440713e-01, var_x=2.468733e-01, ratio=1.7135, contracted=False
+  gamma=0.700: var_v0=1.440713e-01, var_x=4.506630e-01, ratio=3.1281, contracted=False
+  gamma=0.850: var_v0=1.440713e-01, var_x=1.216373e+00, ratio=8.4429, contracted=False
+  gamma=0.950: var_v0=1.440713e-01, var_x=6.978473e+00, ratio=48.4377, contracted=False
+  gamma=0.990: var_v0=1.440713e-01, var_x=9.851442e+01, ratio=683.7896, contracted=False
+  gamma=0.999: var_v0=1.440713e-01, var_x=6.337265e+03, ratio=43987.0201, contracted=False
+  NOTE: contraction is EMPIRICAL on this gamma grid, not a theorem. Text should say 'empirically contracts variance', not 'is a contraction'.
+
+[6] rfa_pc1_resid_ratio (definition + match with 0.623) ...
+  definition: Var(residual of RFA on PC1)/Var(RFA), gene-level promoters chr1
+  n_genes=1007, ratio=0.9712
+  MISMATCH: got 0.9712, expected 0.623. DO NOT silently recompute — ask user.
+
+[7] Writing outputs ...
